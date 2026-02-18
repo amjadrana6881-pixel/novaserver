@@ -110,16 +110,16 @@ async function seedData() {
     }
 }
 
-// Scheduler for Robot Settlement (Every 1 minute)
-const { processExpiredOrders } = require('./routes/robot'); // Import the function
-setInterval(() => {
-    processExpiredOrders();
-}, 60 * 1000); // Check every minute
+// Only listen when running locally (not on Vercel)
+if (process.env.NODE_ENV !== 'production') {
+    server.listen(PORT, async () => {
+        console.log(`\n🚀 NovaTrade API running on http://localhost:${PORT}`);
+        console.log(`📋 Health: http://localhost:${PORT}/api/health\n`);
+        await seedData();
+    });
+} else {
+    // On Vercel, seed data on first request
+    seedData().catch(console.error);
+}
 
-server.listen(PORT, async () => {
-    console.log(`\n🚀 NovaTrade API running on http://localhost:${PORT}`);
-    console.log(`📋 Health: http://localhost:${PORT}/api/health\n`);
-    await seedData();
-});
-
-module.exports = { app, prisma };
+module.exports = app;

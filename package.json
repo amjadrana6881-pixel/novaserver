@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "node index.js",
     "start": "node index.js",
+    "postinstall": "npx prisma generate",
     "db:push": "npx prisma db push",
     "db:seed": "node index.js",
     "db:studio": "npx prisma studio",
