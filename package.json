@@ -3,10 +3,13 @@
   "version": "1.0.0",
   "description": "NovaTrade Backend API",
   "main": "index.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "dev": "node index.js",
     "start": "node index.js",
-    "postinstall": "npx prisma generate",
+    "build": "npx prisma generate",
     "db:push": "npx prisma db push",
     "db:seed": "node index.js",
     "db:studio": "npx prisma studio",
