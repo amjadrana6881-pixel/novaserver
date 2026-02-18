@@ -7,10 +7,15 @@ const multer = require('multer')
 const path = require('path')
 const fs = require('fs')
 
-// Uploads directory
+// Uploads directory (read-only on Vercel, writable locally)
 const uploadsDir = path.join(__dirname, '..', 'uploads', 'banners')
-if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true })
+try {
+    if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true })
+    }
+} catch (e) {
+    // Vercel has read-only filesystem — uploads won't work but app won't crash
+    console.warn('Could not create uploads dir (read-only fs):', e.message)
 }
 
 // Multer config for image uploads
