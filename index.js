@@ -110,16 +110,25 @@ async function seedData() {
     }
 }
 
-// Only listen when running locally (not on Vercel)
+// Only runs when running locally (not on Vercel)
 if (process.env.NODE_ENV !== 'production') {
+    // Scheduler for Robot Settlement (Every 1 minute) local only
+    // const { processExpiredOrders } = require('./routes/robot'); // Removed as per instruction
+    // setInterval(() => {
+    //     processExpiredOrders();
+    // }, 60 * 1000);
+
     server.listen(PORT, async () => {
         console.log(`\n🚀 NovaTrade API running on http://localhost:${PORT}`);
         console.log(`📋 Health: http://localhost:${PORT}/api/health\n`);
         await seedData();
     });
 } else {
-    // On Vercel, seed data on first request
-    seedData().catch(console.error);
+    // On Vercel:
+    // 1. DO NOT run setInterval (use Vercel Cron if needed)
+    // 2. DO NOT auto-seed on every request (too slow/risky)
+    // Export app for Vercel
+    console.log('🚀 NovaTrade API loaded in Vercel environment');
 }
 
 module.exports = app;
