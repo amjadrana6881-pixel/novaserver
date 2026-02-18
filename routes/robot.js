@@ -1,0 +1,184 @@
+const router = require('express').Router();
+const { PrismaClient } = require('@prisma/client');
+const { auth } = require('../middleware/auth');
+const prisma = new PrismaClient();
+
+// Get all robots
+router.get('/', async (req, res) => {
+    try {
+        const robots = await prisma.robot.findMany({ where: { isActive: true }, orderBy: { price: 'asc' } });
+        res.json({ success: true, data: robots });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// Purchase robot
+router.post('/purchase', auth, async (req, res) => {
+    try {
+        const { robotId } = req.body;
+        if (!robotId) return res.status(400).json({ success: false, message: 'Robot ID required' });
+
+        const robot = await prisma.robot.findUnique({ where: { id: robotId } });
+        if (!robot || !robot.isActive) return res.status(404).json({ success: false, message: 'Robot not found' });
+
+        // Check USDT balance (no VIP level restriction - just need enough balance)
+        const wallet = await prisma.wallet.findUnique({
+            where: { userId_coin_account: { userId: req.user.id, coin: 'USDT', account: 'spot' } }
+        });
+        if (!wallet || wallet.available < robot.price) return res.status(400).json({ success: false, message: 'Insufficient USDT balance' });
+
+        // Fixed 3-day period 
+        const endDate = new Date();
+        endDate.setDate(endDate.getDate() + (robot.period || 3));
+
+        await prisma.$transaction([
+            prisma.wallet.update({ where: { id: wallet.id }, data: { available: { decrement: robot.price } } }),
+            prisma.robotOrder.create({
+                data: { userId: req.user.id, robotId: robot.id, amount: robot.price, endDate }
+            })
+        ]);
+
+        const profitText = robot.fixedProfit > 0
+            ? `Fixed profit: ${robot.fixedProfit} USDT`
+            : `Daily return: ${robot.dailyReturn}%`;
+
+        await prisma.notification.create({
+            data: { userId: req.user.id, type: 'system', title: 'Robot Purchased', content: `${robot.name} activated! ${profitText}, Period: ${robot.period || 3} days.` }
+        });
+
+        res.json({ success: true, message: `${robot.name} purchased successfully` });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// Get my robot orders
+router.get('/orders', auth, async (req, res) => {
+    try {
+        const { status } = req.query;
+        const where = { userId: req.user.id };
+        if (status) where.status = status;
+
+        const orders = await prisma.robotOrder.findMany({ where, include: { robot: true }, orderBy: { startDate: 'desc' } });
+        res.json({ success: true, data: orders });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// Process expired orders (run by scheduler)
+const processExpiredOrders = async () => {
+    try {
+        const now = new Date();
+        // Find active orders that have ended
+        const orders = await prisma.robotOrder.findMany({
+            where: { status: 'running', endDate: { lte: now } },
+            include: { user: true, robot: true }
+        });
+
+        for (const order of orders) {
+            // Calculate return
+            let profit = 0;
+            if (order.robot.fixedProfit > 0) {
+                profit = order.robot.fixedProfit;
+            } else {
+                profit = order.amount * (order.robot.dailyReturn / 100) * order.robot.period;
+            }
+            const totalReturn = order.amount + profit;
+
+            // Transaction: Credit user, mark order completed
+            await prisma.$transaction(async (tx) => {
+                // 1. Update wallet (Principal + Profit)
+                const wallet = await tx.wallet.findUnique({
+                    where: { userId_coin_account: { userId: order.userId, coin: 'USDT', account: 'spot' } }
+                });
+
+                if (wallet) {
+                    await tx.wallet.update({
+                        where: { id: wallet.id },
+                        data: { available: { increment: totalReturn } }
+                    });
+                }
+
+                // 2. Mark order completed
+                await tx.robotOrder.update({
+                    where: { id: order.id },
+                    data: { status: 'completed', earned: profit } // Assuming 'earned' field exists or we just track status
+                });
+
+                // 3. Create notification
+                await tx.notification.create({
+                    data: {
+                        userId: order.userId,
+                        type: 'system',
+                        title: 'Robot Completed',
+                        content: `Order for ${order.robot.name} completed. Returned: ${totalReturn.toFixed(2)} USDT (Profit: ${profit.toFixed(2)} USDT).`
+                    }
+                });
+
+                // 4. Distribute Commissions (Level 1: 10%, Level 2: 3%, Level 3: 1% of PROFIT)
+                // Find uplines
+                const user = await tx.user.findUnique({ where: { id: order.userId } });
+                if (user.invitedBy) {
+                    // Level 1
+                    const u1 = await tx.user.findUnique({ where: { inviteCode: user.invitedBy } });
+                    if (u1) {
+                        const comm1 = profit * 0.10;
+                        if (comm1 > 0) await distributeCommission(tx, u1.id, comm1, 1, order.userId);
+
+                        // Level 2
+                        if (u1.invitedBy) {
+                            const u2 = await tx.user.findUnique({ where: { inviteCode: u1.invitedBy } });
+                            if (u2) {
+                                const comm2 = profit * 0.03;
+                                if (comm2 > 0) await distributeCommission(tx, u2.id, comm2, 2, order.userId);
+
+                                // Level 3
+                                if (u2.invitedBy) {
+                                    const u3 = await tx.user.findUnique({ where: { inviteCode: u2.invitedBy } });
+                                    if (u3) {
+                                        const comm3 = profit * 0.01;
+                                        if (comm3 > 0) await distributeCommission(tx, u3.id, comm3, 3, order.userId);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        if (orders.length > 0) console.log(`Processed ${orders.length} expired robot orders.`);
+    } catch (err) {
+        console.error('Error processing orders:', err.message);
+    }
+};
+
+// Helper: Distribute commission
+async function distributeCommission(tx, userId, amount, level, fromUserId) {
+    // Credit wallet
+    // Check if wallet exists, if not create/ignore (users should have wallets on creation)
+    const wallet = await tx.wallet.findUnique({
+        where: { userId_coin_account: { userId, coin: 'USDT', account: 'spot' } }
+    });
+
+    if (wallet) {
+        await tx.wallet.update({
+            where: { id: wallet.id },
+            data: { available: { increment: amount } }
+        });
+
+        // Record (Optional: You might want a 'Commission' table or just use notifications/transaction logs)
+        // For now, let's just notify
+        await tx.notification.create({
+            data: {
+                userId,
+                type: 'system',
+                title: 'Commission Received',
+                content: `You received ${amount.toFixed(2)} USDT commission (Level ${level}) from a team member's robot profit.`
+            }
+        });
+    }
+}
+
+module.exports = { router, processExpiredOrders };

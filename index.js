@@ -1,0 +1,125 @@
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const http = require('http');
+const { PrismaClient } = require('@prisma/client');
+
+const authRoutes = require('./routes/auth');
+const userRoutes = require('./routes/user');
+const walletRoutes = require('./routes/wallet');
+const depositRoutes = require('./routes/deposit');
+const withdrawRoutes = require('./routes/withdraw');
+const robotRoutes = require('./routes/robot');
+const loanRoutes = require('./routes/loan');
+const tradeRoutes = require('./routes/trade');
+const adminRoutes = require('./routes/admin');
+const marketRoutes = require('./routes/market');
+const chatRoutes = require('./routes/chat');
+const notificationRoutes = require('./routes/notification');
+const bannerRoutes = require('./routes/banner');
+const path = require('path');
+
+const prisma = new PrismaClient();
+const app = express();
+const server = http.createServer(app);
+
+// Middleware
+app.use(cors({ origin: process.env.FRONTEND_URL || '*', credentials: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
+
+// Serve uploaded files (banners, etc.)
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Request logger
+app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    next();
+});
+
+// Health check
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', name: 'NovaTrade API', version: '1.0.0', time: new Date().toISOString() });
+});
+
+// Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/user', userRoutes);
+app.use('/api/wallet', walletRoutes);
+app.use('/api/deposit', depositRoutes);
+app.use('/api/withdraw', withdrawRoutes);
+app.use('/api/robot', robotRoutes);
+app.use('/api/loan', loanRoutes);
+app.use('/api/trade', tradeRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/market', marketRoutes);
+app.use('/api/chat', chatRoutes);
+app.use('/api/notification', notificationRoutes);
+app.use('/api/banners', bannerRoutes);
+
+// Error handler
+app.use((err, req, res, next) => {
+    console.error('[ERROR]', err.message);
+    res.status(err.status || 500).json({ success: false, message: err.message || 'Internal server error' });
+});
+
+// 404
+app.use((req, res) => {
+    res.status(404).json({ success: false, message: 'Route not found' });
+});
+
+const PORT = process.env.PORT || 3001;
+
+// Seed default data
+async function seedData() {
+    try {
+        // Seed robots if none exist
+        const robotCount = await prisma.robot.count();
+        if (robotCount === 0) {
+            await prisma.robot.createMany({
+                data: [
+                    { name: 'Robot Basic', price: 50, dailyReturn: 1.5, fixedProfit: 5, period: 3, minLevel: 'V' },
+                    { name: 'Robot No.1', price: 100, dailyReturn: 2.0, fixedProfit: 12, period: 3, minLevel: 'V' },
+                    { name: 'Robot No.2', price: 200, dailyReturn: 2.2, fixedProfit: 28, period: 3, minLevel: 'V' },
+                    { name: 'Robot No.3', price: 500, dailyReturn: 2.5, fixedProfit: 75, period: 3, minLevel: 'V' },
+                    { name: 'Robot No.4', price: 1000, dailyReturn: 3.0, fixedProfit: 160, period: 3, minLevel: 'V' },
+                ]
+            });
+            console.log('✅ Seeded robots');
+        }
+
+        // Create admin if not exists
+        const adminExists = await prisma.user.findFirst({ where: { isAdmin: true } });
+        if (!adminExists) {
+            const bcrypt = require('bcryptjs');
+            await prisma.user.create({
+                data: {
+                    email: 'admin@novatrade.com',
+                    password: await bcrypt.hash('Admin@123', 10),
+                    nickname: 'Admin',
+                    vipLevel: 'V8',
+                    inviteCode: 'ADMIN001',
+                    isAdmin: true,
+                    kycStatus: 'approved'
+                }
+            });
+            console.log('✅ Seeded admin user (admin@novatrade.com / Admin@123)');
+        }
+    } catch (err) {
+        console.log('Seed skipped:', err.message);
+    }
+}
+
+// Scheduler for Robot Settlement (Every 1 minute)
+const { processExpiredOrders } = require('./routes/robot'); // Import the function
+setInterval(() => {
+    processExpiredOrders();
+}, 60 * 1000); // Check every minute
+
+server.listen(PORT, async () => {
+    console.log(`\n🚀 NovaTrade API running on http://localhost:${PORT}`);
+    console.log(`📋 Health: http://localhost:${PORT}/api/health\n`);
+    await seedData();
+});
+
+module.exports = { app, prisma };
