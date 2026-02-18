@@ -98,12 +98,17 @@ router.get('/referrals', auth, async (req, res) => {
             select: { id: true, email: true, vipLevel: true, createdAt: true }
         });
 
-        // Calculate Team Balance (Simplified - just sum spot USDT of all team members)
+        // Calculate Team Balance (sum spot USDT of all team members)
         const allTeamIds = [...level1, ...level2, ...level3].map(u => u.id);
         const wallets = await prisma.wallet.findMany({
             where: { userId: { in: allTeamIds }, coin: 'USDT', account: 'spot' }
         });
         const teamBalance = wallets.reduce((sum, w) => sum + w.available + w.frozen, 0);
+
+        // Attach USDT balance to each user
+        const walletMap = {};
+        wallets.forEach(w => { walletMap[w.userId] = (w.available + w.frozen); });
+        const attachBalance = (users) => users.map(u => ({ ...u, usdtBalance: walletMap[u.id] || 0 }));
 
         res.json({
             success: true,
@@ -117,9 +122,9 @@ router.get('/referrals', auth, async (req, res) => {
                     teamBalance
                 },
                 referrals: {
-                    level1,
-                    level2,
-                    level3
+                    level1: attachBalance(level1),
+                    level2: attachBalance(level2),
+                    level3: attachBalance(level3)
                 }
             }
         });
