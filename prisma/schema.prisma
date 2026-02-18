@@ -23,6 +23,9 @@ model User {
   kycName           String?
   kycIdNumber       String?
   kycCountry        String?
+  kycIdFront        String?   @db.Text // base64 image
+  kycIdBack         String?   @db.Text // base64 image
+  kycSelfie         String?   @db.Text // base64 image
   isAdmin           Boolean   @default(false)
   isActive          Boolean   @default(true)
   createdAt         DateTime  @default(now())

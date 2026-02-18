@@ -33,7 +33,7 @@ router.get('/users', adminAuth, async (req, res) => {
         if (search) where.email = { contains: search };
 
         const [users, total] = await Promise.all([
-            prisma.user.findMany({ where, skip: (page - 1) * limit, take: parseInt(limit), orderBy: { createdAt: 'desc' }, select: { id: true, email: true, nickname: true, vipLevel: true, kycStatus: true, isActive: true, isAdmin: true, inviteCode: true, invitedBy: true, createdAt: true } }),
+            prisma.user.findMany({ where, skip: (page - 1) * limit, take: parseInt(limit), orderBy: { createdAt: 'desc' }, select: { id: true, email: true, nickname: true, vipLevel: true, kycStatus: true, kycName: true, kycIdNumber: true, kycCountry: true, kycIdFront: true, kycIdBack: true, kycSelfie: true, isActive: true, isAdmin: true, inviteCode: true, invitedBy: true, createdAt: true } }),
             prisma.user.count({ where })
         ]);
         res.json({ success: true, data: { users, total, page: parseInt(page), pages: Math.ceil(total / limit) } });

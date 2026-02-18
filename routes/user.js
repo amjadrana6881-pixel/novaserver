@@ -52,12 +52,20 @@ router.put('/transaction-password', auth, async (req, res) => {
 // Submit KYC
 router.post('/kyc', auth, async (req, res) => {
     try {
-        const { name, idNumber, country } = req.body;
+        const { name, idNumber, country, idFront, idBack, selfie } = req.body;
         if (!name || !idNumber || !country) return res.status(400).json({ success: false, message: 'All fields required' });
 
         await prisma.user.update({
             where: { id: req.user.id },
-            data: { kycName: name, kycIdNumber: idNumber, kycCountry: country, kycStatus: 'pending' }
+            data: {
+                kycName: name,
+                kycIdNumber: idNumber,
+                kycCountry: country,
+                kycStatus: 'pending',
+                ...(idFront && { kycIdFront: idFront }),
+                ...(idBack && { kycIdBack: idBack }),
+                ...(selfie && { kycSelfie: selfie })
+            }
         });
         res.json({ success: true, message: 'KYC submitted for review' });
     } catch (err) {
