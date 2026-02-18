@@ -17,11 +17,9 @@
   "author": "",
   "license": "ISC",
   "type": "commonjs",
-  "devDependencies": {
-    "@prisma/client": "^5.22.0",
-    "prisma": "^5.22.0"
-  },
   "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "prisma": "^5.22.0",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
