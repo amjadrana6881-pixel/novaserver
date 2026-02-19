@@ -5,27 +5,9 @@ const prisma = new PrismaClient()
 const { adminAuth } = require('../middleware/auth')
 const multer = require('multer')
 const path = require('path')
-const fs = require('fs')
 
-// Uploads directory (read-only on Vercel, writable locally)
-const uploadsDir = path.join(__dirname, '..', 'uploads', 'banners')
-try {
-    if (!fs.existsSync(uploadsDir)) {
-        fs.mkdirSync(uploadsDir, { recursive: true })
-    }
-} catch (e) {
-    // Vercel has read-only filesystem — uploads won't work but app won't crash
-    console.warn('Could not create uploads dir (read-only fs):', e.message)
-}
-
-// Multer config for image uploads
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, uploadsDir),
-    filename: (req, file, cb) => {
-        const ext = path.extname(file.originalname)
-        cb(null, `banner_${Date.now()}${ext}`)
-    }
-})
+// Multer config for memory storage (Vercel compatible)
+const storage = multer.memoryStorage()
 
 const upload = multer({
     storage,
@@ -38,7 +20,12 @@ const upload = multer({
     }
 })
 
-// PUBLIC: Get active banners (for homepage)
+// Helper to convert buffer to base64 data URI
+const bufferToDataURI = (buffer, mimetype) => {
+    return `data:${mimetype};base64,${buffer.toString('base64')}`
+}
+
+// PUBLIC: Get active banners
 router.get('/', async (req, res) => {
     try {
         const banners = await prisma.banner.findMany({
@@ -61,19 +48,19 @@ router.get('/all', adminAuth, async (req, res) => {
     }
 })
 
-// ADMIN: Create banner with image upload
+// ADMIN: Create banner
 router.post('/', adminAuth, upload.single('image'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ success: false, message: 'Image is required' })
 
         const { title, description, linkUrl, sortOrder } = req.body
-        const imageUrl = `/uploads/banners/${req.file.filename}`
+        const imageUrl = bufferToDataURI(req.file.buffer, req.file.mimetype)
 
         const banner = await prisma.banner.create({
             data: {
                 title: title || 'Banner',
                 description: description || null,
-                imageUrl,
+                imageUrl, // Store base64 direct
                 linkUrl: linkUrl || null,
                 sortOrder: parseInt(sortOrder) || 0,
             }
@@ -99,13 +86,7 @@ router.put('/:id', adminAuth, upload.single('image'), async (req, res) => {
         if (isActive !== undefined) updateData.isActive = isActive === 'true' || isActive === true
 
         if (req.file) {
-            // Delete old image
-            const old = await prisma.banner.findUnique({ where: { id } })
-            if (old && old.imageUrl) {
-                const oldPath = path.join(__dirname, '..', old.imageUrl)
-                if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath)
-            }
-            updateData.imageUrl = `/uploads/banners/${req.file.filename}`
+            updateData.imageUrl = bufferToDataURI(req.file.buffer, req.file.mimetype)
         }
 
         const banner = await prisma.banner.update({ where: { id }, data: updateData })
@@ -118,15 +99,6 @@ router.put('/:id', adminAuth, upload.single('image'), async (req, res) => {
 // ADMIN: Delete banner
 router.delete('/:id', adminAuth, async (req, res) => {
     try {
-        const banner = await prisma.banner.findUnique({ where: { id: req.params.id } })
-        if (!banner) return res.status(404).json({ success: false, message: 'Not found' })
-
-        // Delete image file
-        if (banner.imageUrl) {
-            const imgPath = path.join(__dirname, '..', banner.imageUrl)
-            if (fs.existsSync(imgPath)) fs.unlinkSync(imgPath)
-        }
-
         await prisma.banner.delete({ where: { id: req.params.id } })
         res.json({ success: true, message: 'Deleted' })
     } catch (err) {
