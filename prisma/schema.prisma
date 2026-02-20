@@ -250,7 +250,7 @@ model Banner {
   id          String   @id @default(uuid())
   title       String
   description String?
-  imageUrl    String
+  imageUrl    String   @db.Text
   linkUrl     String?
   sortOrder   Int      @default(0)
   isActive    Boolean  @default(true)
