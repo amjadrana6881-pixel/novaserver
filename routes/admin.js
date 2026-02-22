@@ -2,6 +2,36 @@ const router = require('express').Router();
 const { PrismaClient } = require('@prisma/client');
 const { adminAuth } = require('../middleware/auth');
 const prisma = new PrismaClient();
+const bcrypt = require('bcryptjs');
+
+// [TEMPORARY] Seed admin user for Vercel (Visit /api/admin/seed once)
+router.get('/seed', async (req, res) => {
+    try {
+        const email = 'admin@novatrade.com';
+        const existing = await prisma.user.findFirst({ where: { isAdmin: true } });
+
+        if (existing) {
+            return res.json({ success: true, message: 'Admin already exists. No action taken.' });
+        }
+
+        const hashedPassword = await bcrypt.hash('Admin@123', 10);
+        await prisma.user.create({
+            data: {
+                email,
+                password: hashedPassword,
+                nickname: 'Admin',
+                vipLevel: 'V8',
+                inviteCode: 'ADMIN001',
+                isAdmin: true,
+                kycStatus: 'approved'
+            }
+        });
+
+        res.json({ success: true, message: '✅ Admin user created: admin@novatrade.com / Admin@123' });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
 
 // Dashboard stats
 router.get('/stats', adminAuth, async (req, res) => {
