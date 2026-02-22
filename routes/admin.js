@@ -15,16 +15,20 @@ router.get('/seed', async (req, res) => {
             data: { isActive: true }
         });
 
-        // 2. Check for the specific default admin email
+        // 2. Check for the specific default admin email and FORCE password reset
         const target = await prisma.user.findUnique({ where: { email } });
+        const hashedPassword = await bcrypt.hash('Admin@123', 10);
 
         if (target) {
             await prisma.user.update({
                 where: { email },
-                data: { isActive: true, isAdmin: true }
+                data: {
+                    isActive: true,
+                    isAdmin: true,
+                    password: hashedPassword // Resetting password as well
+                }
             });
         } else {
-            const hashedPassword = await bcrypt.hash('Admin@123', 10);
             await prisma.user.create({
                 data: {
                     email,
