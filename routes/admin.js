@@ -42,6 +42,89 @@ router.get('/users', adminAuth, async (req, res) => {
     }
 });
 
+// Get full user details (referral tree, wallets, deposits, withdrawals, etc.)
+router.get('/users/:id/details', adminAuth, async (req, res) => {
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: req.params.id },
+            select: {
+                id: true, email: true, nickname: true, vipLevel: true,
+                kycStatus: true, kycName: true, kycIdNumber: true, kycCountry: true,
+                isActive: true, inviteCode: true, invitedBy: true,
+                createdAt: true, updatedAt: true
+            }
+        });
+        if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+        // Get referrer info (who invited this user)
+        let referrer = null;
+        if (user.invitedBy) {
+            referrer = await prisma.user.findUnique({
+                where: { inviteCode: user.invitedBy },
+                select: { id: true, email: true, nickname: true, inviteCode: true, vipLevel: true }
+            });
+        }
+
+        // Get downline (users this person referred)
+        const downline = await prisma.user.findMany({
+            where: { invitedBy: user.inviteCode },
+            select: { id: true, email: true, nickname: true, vipLevel: true, kycStatus: true, inviteCode: true, createdAt: true },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        // Get wallet balances
+        const wallets = await prisma.wallet.findMany({
+            where: { userId: user.id },
+            orderBy: { coin: 'asc' }
+        });
+
+        // Get recent deposits
+        const deposits = await prisma.deposit.findMany({
+            where: { userId: user.id },
+            orderBy: { createdAt: 'desc' },
+            take: 15
+        });
+
+        // Get recent withdrawals
+        const withdrawals = await prisma.withdrawal.findMany({
+            where: { userId: user.id },
+            orderBy: { createdAt: 'desc' },
+            take: 15
+        });
+
+        // Get withdrawal addresses
+        const withdrawAddresses = await prisma.withdrawAddress.findMany({
+            where: { userId: user.id },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        // Get active staking plans (robot orders)
+        const stakingPlans = await prisma.robotOrder.findMany({
+            where: { userId: user.id },
+            include: { robot: { select: { name: true, price: true, fixedProfit: true, period: true } } },
+            orderBy: { startDate: 'desc' },
+            take: 15
+        });
+
+        res.json({
+            success: true,
+            data: {
+                user,
+                referrer,
+                downline,
+                downlineCount: downline.length,
+                wallets,
+                deposits,
+                withdrawals,
+                withdrawAddresses,
+                stakingPlans
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
 // Update user (VIP, active status, etc.)
 router.put('/users/:id', adminAuth, async (req, res) => {
     try {

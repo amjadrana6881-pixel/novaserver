@@ -17,6 +17,7 @@ const marketRoutes = require('./routes/market');
 const chatRoutes = require('./routes/chat');
 const notificationRoutes = require('./routes/notification');
 const bannerRoutes = require('./routes/banner');
+const configRoutes = require('./routes/config');
 const path = require('path');
 
 const prisma = new PrismaClient();
@@ -56,6 +57,7 @@ app.use('/api/market', marketRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/notification', notificationRoutes);
 app.use('/api/banners', bannerRoutes);
+app.use('/api/config', configRoutes);
 
 // Error handler
 app.use((err, req, res, next) => {

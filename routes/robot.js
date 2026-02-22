@@ -44,10 +44,10 @@ router.post('/purchase', auth, async (req, res) => {
             : `Daily return: ${robot.dailyReturn}%`;
 
         await prisma.notification.create({
-            data: { userId: req.user.id, type: 'system', title: 'Robot Purchased', content: `${robot.name} activated! ${profitText}, Period: ${robot.period || 3} days.` }
+            data: { userId: req.user.id, type: 'system', title: 'Staking Plan Activated', content: `${robot.name} plan activated! ${profitText}, Lock period: ${robot.period || 3} days.` }
         });
 
-        res.json({ success: true, message: `${robot.name} purchased successfully` });
+        res.json({ success: true, message: `${robot.name} staking plan activated successfully` });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     }
@@ -112,8 +112,8 @@ const processExpiredOrders = async () => {
                     data: {
                         userId: order.userId,
                         type: 'system',
-                        title: 'Robot Completed',
-                        content: `Order for ${order.robot.name} completed. Returned: ${totalReturn.toFixed(2)} USDT (Profit: ${profit.toFixed(2)} USDT).`
+                        title: 'Staking Plan Matured',
+                        content: `Your ${order.robot.name} plan has matured. Returned: ${totalReturn.toFixed(2)} USDT (Profit: ${profit.toFixed(2)} USDT).`
                     }
                 });
 
@@ -175,7 +175,7 @@ async function distributeCommission(tx, userId, amount, level, fromUserId) {
                 userId,
                 type: 'system',
                 title: 'Commission Received',
-                content: `You received ${amount.toFixed(2)} USDT commission (Level ${level}) from a team member's robot profit.`
+                content: `You received ${amount.toFixed(2)} USDT commission (Level ${level}) from a team member's staking returns.`
             }
         });
     }
