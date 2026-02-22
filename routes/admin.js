@@ -8,30 +8,44 @@ const bcrypt = require('bcryptjs');
 router.get('/seed', async (req, res) => {
     try {
         const email = 'admin@novatrade.com';
-        const existing = await prisma.user.findFirst({ where: { isAdmin: true } });
 
-        if (existing) {
-            await prisma.user.update({
-                where: { id: existing.id },
-                data: { isActive: true }
-            });
-            return res.json({ success: true, message: 'Admin account reactivated. You can now login.' });
-        }
-
-        const hashedPassword = await bcrypt.hash('Admin@123', 10);
-        await prisma.user.create({
-            data: {
-                email,
-                password: hashedPassword,
-                nickname: 'Admin',
-                vipLevel: 'V8',
-                inviteCode: 'ADMIN001',
-                isAdmin: true,
-                kycStatus: 'approved'
-            }
+        // 1. Reactivate ALL existing admins just in case
+        await prisma.user.updateMany({
+            where: { isAdmin: true },
+            data: { isActive: true }
         });
 
-        res.json({ success: true, message: '✅ Admin user created: admin@novatrade.com / Admin@123' });
+        // 2. Check for the specific default admin email
+        const target = await prisma.user.findUnique({ where: { email } });
+
+        if (target) {
+            await prisma.user.update({
+                where: { email },
+                data: { isActive: true, isAdmin: true }
+            });
+        } else {
+            const hashedPassword = await bcrypt.hash('Admin@123', 10);
+            await prisma.user.create({
+                data: {
+                    email,
+                    password: hashedPassword,
+                    nickname: 'Admin',
+                    vipLevel: 'V8',
+                    inviteCode: 'ADMIN001',
+                    isAdmin: true,
+                    kycStatus: 'approved',
+                    isActive: true
+                }
+            });
+        }
+
+        res.json({
+            success: true,
+            message: '✅ All admin accounts have been reactivated and ensured.',
+            admin_email: email,
+            login_url: '/admin/login',
+            note: 'Use password: Admin@123 (Case Sensitive: Capital A)'
+        });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     }
