@@ -18,7 +18,9 @@ router.get('/public', async (req, res) => {
                 deposit_addresses: JSON.parse(configMap.deposit_addresses || '[]'),
                 referral_rates: JSON.parse(configMap.referral_rates || '[{"level":"V-V4","l1":10,"l2":3,"l3":1}]'),
                 support_link: configMap.support_link || '',
-                app_download_link: configMap.app_download_link || ''
+                app_download_link: configMap.app_download_link || '',
+                trc20_binance: process.env.BINANCE_USDT_TRC20 || '',
+                erc20_binance: process.env.BINANCE_USDT_ERC20 || ''
             }
         });
     } catch (err) {
