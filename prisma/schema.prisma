@@ -64,6 +64,7 @@ model Deposit {
   amount      Float
   address     String
   txHash      String?
+  proof       String?   @db.Text
   status      String   @default("pending") // pending, approved, rejected
   reviewedBy  String?
   reviewNote  String?

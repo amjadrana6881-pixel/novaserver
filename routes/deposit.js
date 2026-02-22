@@ -6,15 +6,19 @@ const prisma = new PrismaClient();
 // Create deposit request
 router.post('/', auth, async (req, res) => {
     try {
-        const { coin, network, amount, txHash } = req.body;
+        const { coin, network, amount, txHash, proof, address } = req.body;
         if (!coin || !network || !amount || amount <= 0) return res.status(400).json({ success: false, message: 'Invalid deposit params' });
 
-        // Generate a deposit address (mock for now)
-        const addresses = { TRC20: 'TNWgL...hZP', ERC20: '0x8Bf...4Da', BEP20: 'bnb1q...k9z' };
-        const address = addresses[network] || addresses.TRC20;
-
         const deposit = await prisma.deposit.create({
-            data: { userId: req.user.id, coin, network, amount: parseFloat(amount), address, txHash: txHash || null }
+            data: {
+                userId: req.user.id,
+                coin,
+                network,
+                amount: parseFloat(amount),
+                address: address || 'N/A',
+                txHash: txHash || null,
+                proof: proof || null
+            }
         });
 
         await prisma.notification.create({
