@@ -11,7 +11,11 @@ router.get('/seed', async (req, res) => {
         const existing = await prisma.user.findFirst({ where: { isAdmin: true } });
 
         if (existing) {
-            return res.json({ success: true, message: 'Admin already exists. No action taken.' });
+            await prisma.user.update({
+                where: { id: existing.id },
+                data: { isActive: true }
+            });
+            return res.json({ success: true, message: 'Admin account reactivated. You can now login.' });
         }
 
         const hashedPassword = await bcrypt.hash('Admin@123', 10);
