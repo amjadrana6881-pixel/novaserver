@@ -19,17 +19,18 @@ router.get('/seed', async (req, res) => {
         const target = await prisma.user.findUnique({ where: { email } });
         const hashedPassword = await bcrypt.hash('Admin@123', 10);
 
+        let finalUser;
         if (target) {
-            await prisma.user.update({
+            finalUser = await prisma.user.update({
                 where: { email },
                 data: {
                     isActive: true,
                     isAdmin: true,
-                    password: hashedPassword // Resetting password as well
+                    password: hashedPassword
                 }
             });
         } else {
-            await prisma.user.create({
+            finalUser = await prisma.user.create({
                 data: {
                     email,
                     password: hashedPassword,
@@ -45,10 +46,17 @@ router.get('/seed', async (req, res) => {
 
         res.json({
             success: true,
-            message: '✅ All admin accounts have been reactivated and ensured.',
-            admin_email: email,
-            login_url: '/admin/login',
-            note: 'Use password: Admin@123 (Case Sensitive: Capital A)'
+            message: '✅ Admin setup complete.',
+            user_in_db: {
+                id: finalUser.id,
+                email: finalUser.email,
+                isAdmin: finalUser.isAdmin,
+                isActive: finalUser.isActive
+            },
+            credentials_to_use: {
+                email: 'admin@novatrade.com',
+                password: 'Admin@123'
+            }
         });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });

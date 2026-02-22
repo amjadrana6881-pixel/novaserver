@@ -110,8 +110,11 @@ router.post('/register', async (req, res) => {
 // Login
 router.post('/login', async (req, res) => {
     try {
-        const { email, password } = req.body;
+        let { email, password } = req.body;
         if (!email || !password) return res.status(400).json({ success: false, message: 'Email and password required' });
+
+        email = email.trim().toLowerCase();
+        password = password.trim();
 
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user) return res.status(401).json({ success: false, message: 'Invalid credentials' });
