@@ -111,13 +111,23 @@ const processExpiredOrders = async () => {
                 });
 
                 // 3. Create notification
-                await tx.notification.create({
+                const notification = await tx.notification.create({
                     data: {
                         userId: order.userId,
                         type: 'system',
                         title: 'Staking Plan Matured',
                         content: `Your ${order.robot.name} plan has matured. Returned: ${totalReturn.toFixed(2)} USDT (Profit: ${profit.toFixed(2)} USDT).`
                     }
+                });
+
+                // 4. Emit Real-time Notification
+                const { sendNotification } = require('../utils/socket');
+                sendNotification(order.userId, {
+                    id: notification.id,
+                    title: notification.title,
+                    content: notification.content,
+                    type: notification.type,
+                    createdAt: notification.createdAt
                 });
 
                 // 4. Distribute Commissions (Level 1: 10%, Level 2: 3%, Level 3: 1% of PROFIT)

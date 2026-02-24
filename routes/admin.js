@@ -267,13 +267,17 @@ router.put('/deposits/:id', adminAuth, async (req, res) => {
                 await prisma.wallet.create({ data: { userId: deposit.userId, coin: deposit.coin, account: 'spot', available: deposit.amount } });
             }
 
-            await prisma.notification.create({
+            const notification = await tx.notification.create({
                 data: { userId: deposit.userId, type: 'transaction', title: 'Deposit Approved', content: `${deposit.amount} ${deposit.coin} credited to your spot wallet.` }
             });
+            const { sendNotification } = require('../utils/socket');
+            sendNotification(deposit.userId, { id: notification.id, title: notification.title, content: notification.content, type: notification.type, createdAt: notification.createdAt });
         } else {
-            await prisma.notification.create({
+            const notification = await tx.notification.create({
                 data: { userId: deposit.userId, type: 'transaction', title: 'Deposit Rejected', content: `Your deposit of ${deposit.amount} ${deposit.coin} was rejected. ${note || ''}` }
             });
+            const { sendNotification } = require('../utils/socket');
+            sendNotification(deposit.userId, { id: notification.id, title: notification.title, content: notification.content, type: notification.type, createdAt: notification.createdAt });
         }
 
         res.json({ success: true, message: `Deposit ${status}` });
@@ -317,15 +321,19 @@ router.put('/withdrawals/:id', adminAuth, async (req, res) => {
         if (status === 'approved') {
             // Remove frozen funds
             if (wallet) await prisma.wallet.update({ where: { id: wallet.id }, data: { frozen: { decrement: withdrawal.amount + withdrawal.fee } } });
-            await prisma.notification.create({
+            const notification = await tx.notification.create({
                 data: { userId: withdrawal.userId, type: 'transaction', title: 'Withdrawal Approved', content: `${withdrawal.amount} ${withdrawal.coin} sent to ${withdrawal.address}` }
             });
+            const { sendNotification } = require('../utils/socket');
+            sendNotification(withdrawal.userId, { id: notification.id, title: notification.title, content: notification.content, type: notification.type, createdAt: notification.createdAt });
         } else {
             // Unfreeze funds
             if (wallet) await prisma.wallet.update({ where: { id: wallet.id }, data: { frozen: { decrement: withdrawal.amount + withdrawal.fee }, available: { increment: withdrawal.amount + withdrawal.fee } } });
-            await prisma.notification.create({
+            const notification = await tx.notification.create({
                 data: { userId: withdrawal.userId, type: 'transaction', title: 'Withdrawal Rejected', content: `Your withdrawal of ${withdrawal.amount} ${withdrawal.coin} was rejected. ${note || ''}` }
             });
+            const { sendNotification } = require('../utils/socket');
+            sendNotification(withdrawal.userId, { id: notification.id, title: notification.title, content: notification.content, type: notification.type, createdAt: notification.createdAt });
         }
 
         res.json({ success: true, message: `Withdrawal ${status}` });
@@ -363,6 +371,27 @@ router.post('/settle-robots', adminAuth, async (req, res) => {
         const { processExpiredOrders } = require('./robot');
         await processExpiredOrders();
         res.json({ success: true, message: 'Robot settlement process triggered successfully' });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// Broadcast Global Notification
+router.post('/notifications/broadcast', adminAuth, async (req, res) => {
+    try {
+        const { title, content, type = 'system' } = req.body;
+        if (!title || !content) return res.status(400).json({ success: false, message: 'Title and content required' });
+
+        const { broadcastNotification } = require('../utils/socket');
+
+        // 1. Send as real-time socket
+        broadcastNotification({ title, content, type });
+
+        // 2. (Optional) Save to DB for all users if needed, 
+        // but for "General Announcements", sometimes we just want it live or save in a separate 'Announcements' table.
+        // For now, let's keep it purely real-time as requested.
+
+        res.json({ success: true, message: 'Global notification broadcasted' });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     }

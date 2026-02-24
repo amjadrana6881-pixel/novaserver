@@ -24,6 +24,14 @@ const prisma = new PrismaClient();
 const app = express();
 const server = http.createServer(app);
 
+// Initialize Socket.io
+const { Server } = require('socket.io');
+const io = new Server(server, {
+    cors: { origin: process.env.FRONTEND_URL || '*', credentials: true }
+});
+const socketUtils = require('./utils/socket');
+socketUtils.init(io);
+
 // Middleware
 app.use(cors({ origin: process.env.FRONTEND_URL || '*', credentials: true }));
 app.use(express.json({ limit: '50mb' }));
