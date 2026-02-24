@@ -130,34 +130,23 @@ const processExpiredOrders = async () => {
                     createdAt: notification.createdAt
                 });
 
-                // 4. Distribute Commissions (Level 1: 10%, Level 2: 3%, Level 3: 1% of PROFIT)
-                // Find uplines
+                // 5. Distribute Commissions (6 Levels)
+                const commissionRates = [0.15, 0.10, 0.07, 0.05, 0.03, 0.02];
                 const user = await tx.user.findUnique({ where: { id: order.userId } });
-                if (user.invitedBy) {
-                    // Level 1
-                    const u1 = await tx.user.findUnique({ where: { inviteCode: user.invitedBy } });
-                    if (u1) {
-                        const comm1 = profit * 0.10;
-                        if (comm1 > 0) await distributeCommission(tx, u1.id, comm1, 1, order.userId);
 
-                        // Level 2
-                        if (u1.invitedBy) {
-                            const u2 = await tx.user.findUnique({ where: { inviteCode: u1.invitedBy } });
-                            if (u2) {
-                                const comm2 = profit * 0.03;
-                                if (comm2 > 0) await distributeCommission(tx, u2.id, comm2, 2, order.userId);
+                let currentInviterCode = user.invitedBy;
+                for (let level = 1; level <= 6; level++) {
+                    if (!currentInviterCode) break;
 
-                                // Level 3
-                                if (u2.invitedBy) {
-                                    const u3 = await tx.user.findUnique({ where: { inviteCode: u2.invitedBy } });
-                                    if (u3) {
-                                        const comm3 = profit * 0.01;
-                                        if (comm3 > 0) await distributeCommission(tx, u3.id, comm3, 3, order.userId);
-                                    }
-                                }
-                            }
-                        }
+                    const upline = await tx.user.findUnique({ where: { inviteCode: currentInviterCode } });
+                    if (!upline) break;
+
+                    const commissionAmount = profit * commissionRates[level - 1];
+                    if (commissionAmount > 0) {
+                        await distributeCommission(tx, upline.id, commissionAmount, level, order.userId);
                     }
+
+                    currentInviterCode = upline.invitedBy;
                 }
             });
         }
@@ -181,15 +170,24 @@ async function distributeCommission(tx, userId, amount, level, fromUserId) {
             data: { available: { increment: amount } }
         });
 
-        // Record (Optional: You might want a 'Commission' table or just use notifications/transaction logs)
-        // For now, let's just notify
-        await tx.notification.create({
+        // Record & Notify
+        const notification = await tx.notification.create({
             data: {
                 userId,
                 type: 'system',
                 title: 'Commission Received',
-                content: `You received ${amount.toFixed(2)} USDT commission (Level ${level}) from a team member's staking returns.`
+                content: `You received ${amount.toFixed(4)} USDT commission (Level ${level}) from a team member's staking returns.`
             }
+        });
+
+        // Real-time Socket Notification
+        const { sendNotification } = require('../utils/socket');
+        sendNotification(userId, {
+            id: notification.id,
+            title: notification.title,
+            content: notification.content,
+            type: notification.type,
+            createdAt: notification.createdAt
         });
     }
 }

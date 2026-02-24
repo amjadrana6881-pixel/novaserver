@@ -73,33 +73,32 @@ router.post('/kyc', auth, async (req, res) => {
     }
 });
 
-// Get referral info (3 Levels)
+// Get referral info (6 Levels)
 router.get('/referrals', auth, async (req, res) => {
     try {
         const myCode = req.user.inviteCode;
+        const levels = [];
+        let currentLevelCodes = [myCode];
 
-        // Level 1
-        const level1 = await prisma.user.findMany({
-            where: { invitedBy: myCode },
-            select: { id: true, email: true, vipLevel: true, createdAt: true, inviteCode: true }
-        });
+        // Fetch 6 levels of referrals
+        for (let i = 0; i < 6; i++) {
+            const currentLevelUsers = await prisma.user.findMany({
+                where: { invitedBy: { in: currentLevelCodes } },
+                select: { id: true, email: true, vipLevel: true, createdAt: true, inviteCode: true }
+            });
+            levels.push(currentLevelUsers);
+            currentLevelCodes = currentLevelUsers.map(u => u.inviteCode);
+            if (currentLevelCodes.length === 0) {
+                // Fill remaining levels with empty arrays if no more referrals
+                while (levels.length < 6) levels.push([]);
+                break;
+            }
+        }
 
-        // Level 2
-        const l1Codes = level1.map(u => u.inviteCode);
-        const level2 = await prisma.user.findMany({
-            where: { invitedBy: { in: l1Codes } },
-            select: { id: true, email: true, vipLevel: true, createdAt: true, inviteCode: true }
-        });
-
-        // Level 3
-        const l2Codes = level2.map(u => u.inviteCode);
-        const level3 = await prisma.user.findMany({
-            where: { invitedBy: { in: l2Codes } },
-            select: { id: true, email: true, vipLevel: true, createdAt: true }
-        });
+        const [level1, level2, level3, level4, level5, level6] = levels;
 
         // Calculate Team Balance (sum spot USDT of all team members)
-        const allTeamIds = [...level1, ...level2, ...level3].map(u => u.id);
+        const allTeamIds = levels.flat().map(u => u.id);
         const wallets = await prisma.wallet.findMany({
             where: { userId: { in: allTeamIds }, coin: 'USDT', account: 'spot' }
         });
@@ -118,13 +117,19 @@ router.get('/referrals', auth, async (req, res) => {
                     l1: level1.length,
                     l2: level2.length,
                     l3: level3.length,
-                    total: level1.length + level2.length + level3.length,
+                    l4: level4.length,
+                    l5: level5.length,
+                    l6: level6.length,
+                    total: allTeamIds.length,
                     teamBalance
                 },
                 referrals: {
                     level1: attachBalance(level1),
                     level2: attachBalance(level2),
-                    level3: attachBalance(level3)
+                    level3: attachBalance(level3),
+                    level4: attachBalance(level4),
+                    level5: attachBalance(level5),
+                    level6: attachBalance(level6)
                 }
             }
         });
