@@ -357,4 +357,15 @@ router.put('/robots/:id', adminAuth, async (req, res) => {
     }
 });
 
+// Manual Robot Settlement Trigger
+router.post('/settle-robots', adminAuth, async (req, res) => {
+    try {
+        const { processExpiredOrders } = require('./robot');
+        await processExpiredOrders();
+        res.json({ success: true, message: 'Robot settlement process triggered successfully' });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
 module.exports = router;

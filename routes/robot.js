@@ -56,6 +56,9 @@ router.post('/purchase', auth, async (req, res) => {
 // Get my robot orders
 router.get('/orders', auth, async (req, res) => {
     try {
+        // Trigger lazy settlement check
+        processExpiredOrders().catch(err => console.error('Lazy settlement error:', err));
+
         const { status } = req.query;
         const where = { userId: req.user.id };
         if (status) where.status = status;

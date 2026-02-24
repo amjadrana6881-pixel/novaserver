@@ -115,10 +115,10 @@ async function seedData() {
 // Only runs when running locally (not on Vercel)
 if (process.env.NODE_ENV !== 'production') {
     // Scheduler for Robot Settlement (Every 1 minute) local only
-    // const { processExpiredOrders } = require('./routes/robot'); // Removed as per instruction
-    // setInterval(() => {
-    //     processExpiredOrders();
-    // }, 60 * 1000);
+    const { processExpiredOrders } = require('./routes/robot');
+    setInterval(() => {
+        processExpiredOrders();
+    }, 60 * 1000);
 
     server.listen(PORT, async () => {
         console.log(`\n🚀 NovaTrade API running on http://localhost:${PORT}`);
