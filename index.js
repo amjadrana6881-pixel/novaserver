@@ -52,6 +52,19 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', name: 'NovaTrade API', version: '1.0.0', time: new Date().toISOString() });
 });
 
+// Cron: Process expired robot orders (called by Vercel Cron or manually)
+app.get('/api/cron/process-robots', async (req, res) => {
+    try {
+        console.log(`[CRON] ${new Date().toISOString()} — Processing expired robot orders...`);
+        const { processExpiredOrders } = require('./routes/robot');
+        await processExpiredOrders();
+        res.json({ success: true, message: 'Robot settlement executed', time: new Date().toISOString() });
+    } catch (err) {
+        console.error('[CRON ERROR]', err.message);
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
