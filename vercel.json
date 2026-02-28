@@ -2,7 +2,7 @@
     "version": 2,
     "crons": [
         {
-            "path": "/api/cron/process-robots",
+            "path": "/api/robot/settle",
             "schedule": "0 * * * *"
         }
     ],

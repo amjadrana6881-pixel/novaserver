@@ -13,6 +13,18 @@ router.get('/', async (req, res) => {
     }
 });
 
+// Settle expired orders (can be called manually or by cron)
+router.get('/settle', async (req, res) => {
+    try {
+        console.log(`[SETTLE] ${new Date().toISOString()} — Processing expired robot orders...`);
+        await processExpiredOrders();
+        res.json({ success: true, message: 'Robot settlement executed', time: new Date().toISOString() });
+    } catch (err) {
+        console.error('[SETTLE ERROR]', err.message);
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
 // Purchase robot
 router.post('/purchase', auth, async (req, res) => {
     try {
