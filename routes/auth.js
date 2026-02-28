@@ -155,6 +155,10 @@ router.post('/reset-password', async (req, res) => {
 
 // Get current user
 router.get('/me', auth, async (req, res) => {
+    // Lazy settlement: process any expired robot orders for instant feedback
+    const { processExpiredOrders } = require('./robot');
+    processExpiredOrders().catch(err => console.error('Lazy settlement error:', err.message));
+
     const user = req.user;
     res.json({
         success: true,

@@ -18,6 +18,7 @@ const chatRoutes = require('./routes/chat');
 const notificationRoutes = require('./routes/notification');
 const bannerRoutes = require('./routes/banner');
 const configRoutes = require('./routes/config');
+const cronRoutes = require('./routes/cron');
 const path = require('path');
 
 const prisma = new PrismaClient();
@@ -66,6 +67,7 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/notification', notificationRoutes);
 app.use('/api/banners', bannerRoutes);
 app.use('/api/config', configRoutes);
+app.use('/api/cron', cronRoutes);
 
 // Error handler
 app.use((err, req, res, next) => {
