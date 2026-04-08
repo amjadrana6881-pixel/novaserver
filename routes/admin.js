@@ -236,10 +236,24 @@ router.get('/deposits', adminAuth, async (req, res) => {
         if (status) where.status = status;
 
         const [deposits, total] = await Promise.all([
-            prisma.deposit.findMany({ where, skip: (page - 1) * limit, take: parseInt(limit), orderBy: { createdAt: 'desc' }, include: { user: { select: { email: true, vipLevel: true } } } }),
+            prisma.deposit.findMany({ where, skip: (page - 1) * limit, take: parseInt(limit), orderBy: { createdAt: 'desc' }, include: { user: { select: { id: true, email: true, nickname: true, vipLevel: true, kycStatus: true, inviteCode: true, invitedBy: true, createdAt: true } } } }),
             prisma.deposit.count({ where })
         ]);
-        res.json({ success: true, data: { deposits, total, page: parseInt(page) } });
+
+        // Enrich each deposit with user's referrer info and totals
+        const enriched = await Promise.all(deposits.map(async (d) => {
+            let referrer = null;
+            if (d.user?.invitedBy) {
+                referrer = await prisma.user.findUnique({ where: { inviteCode: d.user.invitedBy }, select: { email: true, nickname: true, inviteCode: true } });
+            }
+            const [totalDeposited, totalWithdrawn] = await Promise.all([
+                prisma.deposit.aggregate({ _sum: { amount: true }, where: { userId: d.userId, status: 'approved' } }),
+                prisma.withdrawal.aggregate({ _sum: { amount: true }, where: { userId: d.userId, status: 'approved' } })
+            ]);
+            return { ...d, referrer, totalDeposited: totalDeposited._sum.amount || 0, totalWithdrawn: totalWithdrawn._sum.amount || 0 };
+        }));
+
+        res.json({ success: true, data: { deposits: enriched, total, page: parseInt(page) } });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     }
@@ -267,17 +281,15 @@ router.put('/deposits/:id', adminAuth, async (req, res) => {
                 await prisma.wallet.create({ data: { userId: deposit.userId, coin: deposit.coin, account: 'spot', available: deposit.amount } });
             }
 
-            const notification = await tx.notification.create({
+            const notification = await prisma.notification.create({
                 data: { userId: deposit.userId, type: 'transaction', title: 'Deposit Approved', content: `${deposit.amount} ${deposit.coin} credited to your spot wallet.` }
             });
-            const { sendNotification } = require('../utils/socket');
-            sendNotification(deposit.userId, { id: notification.id, title: notification.title, content: notification.content, type: notification.type, createdAt: notification.createdAt });
+            try { const { sendNotification } = require('../utils/socket'); sendNotification(deposit.userId, { id: notification.id, title: notification.title, content: notification.content, type: notification.type, createdAt: notification.createdAt }); } catch(e) {}
         } else {
-            const notification = await tx.notification.create({
+            const notification = await prisma.notification.create({
                 data: { userId: deposit.userId, type: 'transaction', title: 'Deposit Rejected', content: `Your deposit of ${deposit.amount} ${deposit.coin} was rejected. ${note || ''}` }
             });
-            const { sendNotification } = require('../utils/socket');
-            sendNotification(deposit.userId, { id: notification.id, title: notification.title, content: notification.content, type: notification.type, createdAt: notification.createdAt });
+            try { const { sendNotification } = require('../utils/socket'); sendNotification(deposit.userId, { id: notification.id, title: notification.title, content: notification.content, type: notification.type, createdAt: notification.createdAt }); } catch(e) {}
         }
 
         res.json({ success: true, message: `Deposit ${status}` });
@@ -294,10 +306,24 @@ router.get('/withdrawals', adminAuth, async (req, res) => {
         if (status) where.status = status;
 
         const [withdrawals, total] = await Promise.all([
-            prisma.withdrawal.findMany({ where, skip: (page - 1) * limit, take: parseInt(limit), orderBy: { createdAt: 'desc' }, include: { user: { select: { email: true, vipLevel: true } } } }),
+            prisma.withdrawal.findMany({ where, skip: (page - 1) * limit, take: parseInt(limit), orderBy: { createdAt: 'desc' }, include: { user: { select: { id: true, email: true, nickname: true, vipLevel: true, kycStatus: true, inviteCode: true, invitedBy: true, createdAt: true } } } }),
             prisma.withdrawal.count({ where })
         ]);
-        res.json({ success: true, data: { withdrawals, total, page: parseInt(page) } });
+
+        // Enrich each withdrawal with user's referrer info and totals
+        const enriched = await Promise.all(withdrawals.map(async (w) => {
+            let referrer = null;
+            if (w.user?.invitedBy) {
+                referrer = await prisma.user.findUnique({ where: { inviteCode: w.user.invitedBy }, select: { email: true, nickname: true, inviteCode: true } });
+            }
+            const [totalDeposited, totalWithdrawn] = await Promise.all([
+                prisma.deposit.aggregate({ _sum: { amount: true }, where: { userId: w.userId, status: 'approved' } }),
+                prisma.withdrawal.aggregate({ _sum: { amount: true }, where: { userId: w.userId, status: 'approved' } })
+            ]);
+            return { ...w, referrer, totalDeposited: totalDeposited._sum.amount || 0, totalWithdrawn: totalWithdrawn._sum.amount || 0 };
+        }));
+
+        res.json({ success: true, data: { withdrawals: enriched, total, page: parseInt(page) } });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     }
@@ -321,19 +347,17 @@ router.put('/withdrawals/:id', adminAuth, async (req, res) => {
         if (status === 'approved') {
             // Remove frozen funds
             if (wallet) await prisma.wallet.update({ where: { id: wallet.id }, data: { frozen: { decrement: withdrawal.amount + withdrawal.fee } } });
-            const notification = await tx.notification.create({
+            const notification = await prisma.notification.create({
                 data: { userId: withdrawal.userId, type: 'transaction', title: 'Withdrawal Approved', content: `${withdrawal.amount} ${withdrawal.coin} sent to ${withdrawal.address}` }
             });
-            const { sendNotification } = require('../utils/socket');
-            sendNotification(withdrawal.userId, { id: notification.id, title: notification.title, content: notification.content, type: notification.type, createdAt: notification.createdAt });
+            try { const { sendNotification } = require('../utils/socket'); sendNotification(withdrawal.userId, { id: notification.id, title: notification.title, content: notification.content, type: notification.type, createdAt: notification.createdAt }); } catch(e) {}
         } else {
             // Unfreeze funds
             if (wallet) await prisma.wallet.update({ where: { id: wallet.id }, data: { frozen: { decrement: withdrawal.amount + withdrawal.fee }, available: { increment: withdrawal.amount + withdrawal.fee } } });
-            const notification = await tx.notification.create({
+            const notification = await prisma.notification.create({
                 data: { userId: withdrawal.userId, type: 'transaction', title: 'Withdrawal Rejected', content: `Your withdrawal of ${withdrawal.amount} ${withdrawal.coin} was rejected. ${note || ''}` }
             });
-            const { sendNotification } = require('../utils/socket');
-            sendNotification(withdrawal.userId, { id: notification.id, title: notification.title, content: notification.content, type: notification.type, createdAt: notification.createdAt });
+            try { const { sendNotification } = require('../utils/socket'); sendNotification(withdrawal.userId, { id: notification.id, title: notification.title, content: notification.content, type: notification.type, createdAt: notification.createdAt }); } catch(e) {}
         }
 
         res.json({ success: true, message: `Withdrawal ${status}` });
