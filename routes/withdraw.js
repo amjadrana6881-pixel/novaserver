@@ -19,11 +19,11 @@ router.post('/', auth, async (req, res) => {
         const wallet = await prisma.wallet.findUnique({
             where: { userId_coin_account: { userId: req.user.id, coin, account: 'spot' } }
         });
-        const fee = coin === 'USDT' ? 1 : 0.0001;
-        if (!wallet || wallet.available < amount + fee) return res.status(400).json({ success: false, message: 'Insufficient balance' });
+        const fee = parseFloat((amount * 0.10).toFixed(4));
+        if (!wallet || wallet.available < amount) return res.status(400).json({ success: false, message: 'Insufficient balance' });
 
         // Freeze amount
-        await prisma.wallet.update({ where: { id: wallet.id }, data: { available: { decrement: amount + fee }, frozen: { increment: amount + fee } } });
+        await prisma.wallet.update({ where: { id: wallet.id }, data: { available: { decrement: amount }, frozen: { increment: amount } } });
 
         const withdrawal = await prisma.withdrawal.create({
             data: { userId: req.user.id, coin, network, amount: parseFloat(amount), fee, address }

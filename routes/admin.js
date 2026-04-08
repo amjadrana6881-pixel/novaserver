@@ -346,14 +346,14 @@ router.put('/withdrawals/:id', adminAuth, async (req, res) => {
 
         if (status === 'approved') {
             // Remove frozen funds
-            if (wallet) await prisma.wallet.update({ where: { id: wallet.id }, data: { frozen: { decrement: withdrawal.amount + withdrawal.fee } } });
+            if (wallet) await prisma.wallet.update({ where: { id: wallet.id }, data: { frozen: { decrement: withdrawal.amount } } });
             const notification = await prisma.notification.create({
                 data: { userId: withdrawal.userId, type: 'transaction', title: 'Withdrawal Approved', content: `${withdrawal.amount} ${withdrawal.coin} sent to ${withdrawal.address}` }
             });
             try { const { sendNotification } = require('../utils/socket'); sendNotification(withdrawal.userId, { id: notification.id, title: notification.title, content: notification.content, type: notification.type, createdAt: notification.createdAt }); } catch(e) {}
         } else {
             // Unfreeze funds
-            if (wallet) await prisma.wallet.update({ where: { id: wallet.id }, data: { frozen: { decrement: withdrawal.amount + withdrawal.fee }, available: { increment: withdrawal.amount + withdrawal.fee } } });
+            if (wallet) await prisma.wallet.update({ where: { id: wallet.id }, data: { frozen: { decrement: withdrawal.amount }, available: { increment: withdrawal.amount } } });
             const notification = await prisma.notification.create({
                 data: { userId: withdrawal.userId, type: 'transaction', title: 'Withdrawal Rejected', content: `Your withdrawal of ${withdrawal.amount} ${withdrawal.coin} was rejected. ${note || ''}` }
             });
